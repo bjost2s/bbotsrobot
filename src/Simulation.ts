@@ -33,6 +33,9 @@ export class Simulation {
         // Ground
         this.createGround();
 
+        // Obstacle
+        this.createObstacle(new THREE.Vector3(0, 0.5, -5));
+
         // Handle window resizing
         window.addEventListener('resize', this.onWindowResize.bind(this));
 
@@ -70,13 +73,32 @@ export class Simulation {
         this.updatableObjects.push(obj);
     }
 
+    private createObstacle(position: THREE.Vector3) {
+        const size = 1.5;
+        // Visual
+        const obstacleGeo = new THREE.BoxGeometry(size, size, size);
+        const obstacleMat = new THREE.MeshStandardMaterial({ color: 0x00aaff });
+        const obstacleMesh = new THREE.Mesh(obstacleGeo, obstacleMat);
+        obstacleMesh.position.copy(position);
+        this.scene.add(obstacleMesh);
+
+        // Physical
+        const obstacleShape = new CANNON.Box(new CANNON.Vec3(size / 2, size / 2, size / 2));
+        const obstacleBody = new CANNON.Body({
+            mass: 0, // Static body
+            shape: obstacleShape,
+            position: position as any,
+        });
+        this.world.addBody(obstacleBody);
+    }
+
     private animate() {
         requestAnimationFrame(this.animate.bind(this));
 
         const deltaTime = this.clock.getDelta();
         this.world.step(1 / 60, deltaTime, 3);
 
-        // Update all registered objects
+        // Update all registered (dynamic) objects
         for (const obj of this.updatableObjects) {
             obj.update();
         }

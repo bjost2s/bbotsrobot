@@ -41,16 +41,27 @@ monaco.languages.typescript.typescriptDefaults.addExtraLib(
 // Create the editor
 const editorContainer = document.getElementById('editor-container')!;
 const editor = monaco.editor.create(editorContainer, {
-    value: `// Type 'robot.' to see autocompletion
-// then click "Run"
+    value: `// The robot will drive forward until it hits the obstacle.
+// The onCollision function will then make it back up and turn.
 
-let i = 0;
-setInterval(() => {
-    i += 0.05;
-    const left = Math.sin(i);
-    const right = Math.cos(i);
-    robot.setSpeed(left, right);
-}, 50);
+// Set the robot to drive forward
+robot.setSpeed(1, 1);
+
+// Register a function to be called when a collision occurs
+robot.onCollision(() => {
+    // Back up
+    robot.setSpeed(-1, -1);
+
+    // After a short delay, turn
+    setTimeout(() => {
+        robot.setSpeed(-0.5, 1); // Turn left
+    }, 500); // 500ms delay
+
+    // After another delay, drive forward again
+    setTimeout(() => {
+        robot.setSpeed(1, 1);
+    }, 1500); // 1.5s delay
+});
 `,
     language: 'typescript',
     theme: 'vs-dark',
@@ -59,15 +70,17 @@ setInterval(() => {
 
 // --- Connect Editor to Simulation ---
 const runButton = document.getElementById('run-button')!;
-let userCodeInterval: number | undefined;
+const userCodeTimers: (number | NodeJS.Timeout)[] = [];
+
+function stopUserCode() {
+    // Clear all scheduled timers from the previous run
+    userCodeTimers.forEach(clearTimeout); // clearTimeout works for both setTimeout and setInterval
+    userCodeTimers.length = 0; // Empty the array
+    robot.reset();
+}
 
 runButton.addEventListener('click', async () => {
-    // Clear any previously running user code
-    if (userCodeInterval) {
-        clearInterval(userCodeInterval);
-    }
-    // Reset robot speed
-    robot.setSpeed(0, 0);
+    stopUserCode();
 
     const model = editor.getModel();
     if (!model) return;
@@ -78,15 +91,24 @@ runButton.addEventListener('click', async () => {
 
     if (output.outputFiles.length > 0) {
         const jsCode = output.outputFiles[0].text;
-        // Execute the user's code.
-        // We pass our robot instance to the function's scope.
-        // We also redefine setInterval to store the interval ID so we can clear it later.
         try {
-            const userFunction = new Function('robot', 'setInterval', jsCode);
-            userFunction(robot, (fn: TimerHandler, t: number) => {
-                userCodeInterval = setInterval(fn, t);
-                return userCodeInterval;
-            });
+            // Create a sandboxed function with a custom setTimeout and setInterval
+            // that track the timer IDs.
+            const userFunction = new Function('robot', 'setTimeout', 'setInterval', jsCode);
+
+            const customSetTimeout = (fn: TimerHandler, t: number) => {
+                const id = setTimeout(fn, t);
+                userCodeTimers.push(id);
+                return id;
+            };
+
+            const customSetInterval = (fn: TimerHandler, t: number) => {
+                const id = setInterval(fn, t);
+                userCodeTimers.push(id);
+                return id;
+            };
+
+            userFunction(robot, customSetTimeout, customSetInterval);
         } catch (e) {
             console.error("Error executing user code:", e);
             alert("An error occurred in your code. Check the console for details.");

@@ -9,6 +9,7 @@ export class Robot {
     private world: CANNON.World;
     private leftSpeed = 0;
     private rightSpeed = 0;
+    private collisionHandler: (() => void) | null = null;
 
     constructor(scene: THREE.Scene, world: CANNON.World) {
         this.scene = scene;
@@ -69,6 +70,29 @@ export class Robot {
         this.world.addBody(this.body);
 
         this.world.addEventListener('preStep', this.applyForces.bind(this));
+
+        // Listen for collision events
+        this.body.addEventListener('collide', () => {
+            if (this.collisionHandler) {
+                this.collisionHandler();
+            }
+        });
+    }
+
+    /**
+     * Registers a callback function to be executed when the robot collides with an object.
+     * @param callback The function to execute on collision.
+     */
+    public onCollision(callback: () => void): void {
+        this.collisionHandler = callback;
+    }
+
+    /**
+     * Resets the robot's state (speed and collision handler).
+     */
+    public reset(): void {
+        this.setSpeed(0, 0);
+        this.collisionHandler = null;
     }
 
     public setSpeed(left: number, right: number): void {
